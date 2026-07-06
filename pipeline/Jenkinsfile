@@ -7,7 +7,7 @@ pipeline {
     }
 
     stages {
-        stage('Resolve Environment') {
+        stage('Resolve Target') {
             steps {
                 script {
                     if (env.BRANCH_NAME == 'develop') {
@@ -26,6 +26,19 @@ pipeline {
             }
         }
 
+        stage('Validate') {
+            steps {
+                echo "Validating repository structure..."
+                powershell """
+                    if (!(Test-Path ".\\applications\\${env.APPLICATION}\\${env.VERSION}\\mqsc")) {
+                        throw "MQSC folder not found"
+                    }
+
+                    Get-ChildItem ".\\applications\\${env.APPLICATION}\\${env.VERSION}\\mqsc" -Filter "*.mqsc"
+                """
+            }
+        }
+
         stage('Deploy MQ Objects') {
             when {
                 expression {
@@ -41,14 +54,16 @@ pipeline {
                 """
             }
         }
-    }
 
-    post {
-        success {
-            echo 'Pipeline completed successfully.'
-        }
-        failure {
-            echo 'Pipeline failed.'
+        stage('Skip Deployment') {
+            when {
+                expression {
+                    return env.TARGET_ENV == 'none'
+                }
+            }
+            steps {
+                echo "Feature branch detected. Validation only. No deployment executed."
+            }
         }
     }
 }
