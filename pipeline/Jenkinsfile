@@ -1,52 +1,69 @@
 pipeline {
     agent any
 
-    parameters {
-        choice(
-            name: 'ENVIRONMENT',
-            choices: ['dev', 'qa', 'prd'],
-            description: 'Target environment'
-        )
-
-        string(
-            name: 'APPLICATION',
-            defaultValue: 'orders',
-            description: 'Application name'
-        )
-
-        string(
-            name: 'VERSION',
-            defaultValue: '1.0.0',
-            description: 'Application version'
-        )
+    environment {
+        APPLICATION = 'orders'
+        VERSION = '1.0.0'
     }
 
     stages {
-        stage('Checkout') {
+        stage('Resolve Target') {
             steps {
-                echo 'Checking out repository...'
+                script {
+                    if (env.BRANCH_NAME == 'develop') {
+                        env.TARGET_ENV = 'dev'
+                    } else if (env.BRANCH_NAME == 'qa') {
+                        env.TARGET_ENV = 'qa'
+                    } else if (env.BRANCH_NAME == 'main') {
+                        env.TARGET_ENV = 'prd'
+                    } else {
+                        env.TARGET_ENV = 'none'
+                    }
+
+                    echo "Branch: ${env.BRANCH_NAME}"
+                    echo "Target environment: ${env.TARGET_ENV}"
+                }
+            }
+        }
+
+        stage('Validate') {
+            steps {
+                echo "Validating repository structure..."
+                powershell """
+                    if (!(Test-Path ".\\applications\\${env.APPLICATION}\\${env.VERSION}\\mqsc")) {
+                        throw "MQSC folder not found"
+                    }
+
+                    Get-ChildItem ".\\applications\\${env.APPLICATION}\\${env.VERSION}\\mqsc" -Filter "*.mqsc"
+                """
             }
         }
 
         stage('Deploy MQ Objects') {
+            when {
+                expression {
+                    return env.TARGET_ENV != 'none'
+                }
+            }
             steps {
                 powershell """
                     .\\scripts\\deploy.ps1 `
-                        -Environment ${params.ENVIRONMENT} `
-                        -Application ${params.APPLICATION} `
-                        -Version ${params.VERSION}
+                        -Environment ${env.TARGET_ENV} `
+                        -Application ${env.APPLICATION} `
+                        -Version ${env.VERSION}
                 """
             }
         }
-    }
 
-    post {
-        success {
-            echo 'MQ deployment completed successfully.'
-        }
-
-        failure {
-            echo 'MQ deployment failed.'
+        stage('Skip Deployment') {
+            when {
+                expression {
+                    return env.TARGET_ENV == 'none'
+                }
+            }
+            steps {
+                echo "Feature branch detected. Validation only. No deployment executed."
+            }
         }
     }
 }
