@@ -1,0 +1,52 @@
+pipeline {
+    agent any
+
+    parameters {
+        choice(
+            name: 'ENVIRONMENT',
+            choices: ['dev', 'qa', 'prd'],
+            description: 'Target environment'
+        )
+
+        string(
+            name: 'APPLICATION',
+            defaultValue: 'orders',
+            description: 'Application name'
+        )
+
+        string(
+            name: 'VERSION',
+            defaultValue: '1.0.0',
+            description: 'Application version'
+        )
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                echo 'Checking out repository...'
+            }
+        }
+
+        stage('Deploy MQ Objects') {
+            steps {
+                powershell """
+                    .\\scripts\\deploy.ps1 `
+                        -Environment ${params.ENVIRONMENT} `
+                        -Application ${params.APPLICATION} `
+                        -Version ${params.VERSION}
+                """
+            }
+        }
+    }
+
+    post {
+        success {
+            echo 'MQ deployment completed successfully.'
+        }
+
+        failure {
+            echo 'MQ deployment failed.'
+        }
+    }
+}

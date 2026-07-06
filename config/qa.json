@@ -1,0 +1,5 @@
+{
+    "environment": "QA",
+    "queueManager": "QM.QA",
+    "port": 1415
+}
